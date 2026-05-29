@@ -74,6 +74,10 @@ app.use(session({
   cookie: { secure: false, maxAge: 24 * 60 * 60 * 1000 }
 }));
 
+// 提供静态文件（生产环境）
+app.use(express.static(join(__dirname, '../dist')));
+app.use(express.static(join(__dirname, '..')));
+
 // 认证中间件
 const requireAuth = (req, res, next) => {
   if (!req.session.userId) {
@@ -207,6 +211,11 @@ app.get('/api/status', requireAuth, async (req, res) => {
   } catch (error) {
     res.json({ caddy: 'inactive', proxyCount: 0, uptime: 0 });
   }
+});
+
+// ========== 前端路由 (SPA fallback) ==========
+app.get('*', (req, res) => {
+  res.sendFile(join(__dirname, '../index.html'));
 });
 
 app.listen(PORT, () => {
