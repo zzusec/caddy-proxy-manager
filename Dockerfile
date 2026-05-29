@@ -9,7 +9,7 @@ RUN apk add --no-cache \
     ca-certificates
 
 # 安装 Caddy
-RUN wget -qO- https://caddyserver.com/api/download?os=linux&arch=amd64 | tar xz -C /usr/bin/ \
+RUN wget -qO /usr/bin/caddy "https://caddyserver.com/api/download?os=linux&arch=amd64" \
     && chmod +x /usr/bin/caddy
 
 # 创建工作目录
