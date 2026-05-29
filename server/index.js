@@ -65,7 +65,10 @@ if (!adminExists) {
 }
 
 // 中间件
-app.use(cors({ origin: 'http://localhost:5173', credentials: true }));
+app.use(cors({
+  origin: true,  // 允许所有来源（生产环境应该限制）
+  credentials: true
+}));
 app.use(bodyParser.json());
 app.use(session({
   secret: 'cpm-secret-key-change-in-production',
