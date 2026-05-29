@@ -112,6 +112,30 @@ app.get('/api/me', requireAuth, (req, res) => {
   res.json({ username: req.session.username });
 });
 
+app.post('/api/change-password', requireAuth, (req, res) => {
+  const { oldPassword, newPassword } = req.body;
+
+  if (!oldPassword || !newPassword) {
+    return res.status(400).json({ error: '请输入旧密码和新密码' });
+  }
+
+  if (newPassword.length < 6) {
+    return res.status(400).json({ error: '新密码长度至少 6 位' });
+  }
+
+  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.session.userId);
+  if (!user || !bcrypt.compareSync(oldPassword, user.password)) {
+    return res.status(401).json({ error: '旧密码错误' });
+  }
+
+  const hashedPassword = bcrypt.hashSync(newPassword, 10);
+  db.prepare('UPDATE users SET password = ? WHERE id = ?').run(hashedPassword, req.session.userId);
+
+  db.prepare('INSERT INTO logs (type, message) VALUES (?, ?)').run('info', `用户 ${user.username} 修改了密码`);
+
+  res.json({ success: true, message: '密码修改成功' });
+});
+
 // ========== 代理管理接口 ==========
 app.get('/api/proxies', requireAuth, (req, res) => {
   const proxies = db.prepare('SELECT * FROM proxies ORDER BY created_at DESC').all();

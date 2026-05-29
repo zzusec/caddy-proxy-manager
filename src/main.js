@@ -46,6 +46,12 @@ class App {
     const res = await fetch(`${API_BASE}/proxies`, { credentials: 'include' });
     this.proxies = await res.json();
     this.renderProxyList();
+
+    // 绑定添加按钮事件（在渲染后）
+    const addBtn = document.getElementById('addProxyBtn');
+    if (addBtn) {
+      addBtn.addEventListener('click', () => this.showAddProxyModal());
+    }
   }
 
   async addProxy(link, domain, email) {
@@ -119,6 +125,7 @@ class App {
         <div class="user-info">
           <div class="user-avatar">👤</div>
           <span>${this.currentUser.username}</span>
+          <button class="btn btn-primary" id="changePasswordBtn">修改密码</button>
           <button class="btn btn-danger" id="logoutBtn">退出</button>
         </div>
       </div>
@@ -152,6 +159,30 @@ class App {
             <div style="display: flex; gap: 10px; justify-content: flex-end;">
               <button type="button" class="btn" id="cancelAddProxy">取消</button>
               <button type="submit" class="btn btn-success">添加</button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <div class="modal" id="changePasswordModal">
+        <div class="modal-content">
+          <div class="modal-header">修改密码</div>
+          <form id="changePasswordForm">
+            <div class="form-group">
+              <label class="form-label">当前密码</label>
+              <input type="password" class="form-input" name="oldPassword" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label">新密码 (至少 6 位)</label>
+              <input type="password" class="form-input" name="newPassword" required minlength="6">
+            </div>
+            <div class="form-group">
+              <label class="form-label">确认新密码</label>
+              <input type="password" class="form-input" name="confirmPassword" required minlength="6">
+            </div>
+            <div style="display: flex; gap: 10px; justify-content: flex-end;">
+              <button type="button" class="btn" id="cancelChangePassword">取消</button>
+              <button type="submit" class="btn btn-success">确认修改</button>
             </div>
           </form>
         </div>
@@ -222,6 +253,7 @@ class App {
 
   bindDashboardEvents() {
     document.getElementById('logoutBtn').addEventListener('click', () => this.logout());
+    document.getElementById('changePasswordBtn').addEventListener('click', () => this.showChangePasswordModal());
 
     document.querySelectorAll('.nav-item').forEach(item => {
       item.addEventListener('click', (e) => {
@@ -251,19 +283,69 @@ class App {
         break;
       case 'proxies':
         this.loadProxies();
-        const addBtn = document.getElementById('addProxyBtn');
-        if (addBtn) {
-          addBtn.addEventListener('click', () => this.showAddProxyModal());
-        }
         break;
       case 'logs':
-        content.innerHTML = `
-          <div class="card">
-            <div class="card-title">系统日志</div>
-            <div class="loading">日志功能开发中...</div>
-          </div>
-        `;
+        this.loadLogs();
         break;
+    }
+  }
+
+  async loadLogs() {
+    const content = document.getElementById('content');
+    content.innerHTML = `
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">系统日志</div>
+          <button class="btn btn-primary" id="refreshLogsBtn">刷新</button>
+        </div>
+        <div class="loading">加载中...</div>
+      </div>
+    `;
+
+    try {
+      const res = await fetch(`${API_BASE}/logs`, { credentials: 'include' });
+      const logs = await res.json();
+
+      content.innerHTML = `
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">系统日志</div>
+            <button class="btn btn-primary" id="refreshLogsBtn">刷新</button>
+          </div>
+          ${logs.length === 0 ? '<div class="loading">暂无日志</div>' : `
+            <table>
+              <thead>
+                <tr>
+                  <th>时间</th>
+                  <th>类型</th>
+                  <th>消息</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${logs.map(log => `
+                  <tr>
+                    <td>${new Date(log.created_at).toLocaleString('zh-CN')}</td>
+                    <td><span class="badge badge-${log.type === 'error' ? 'danger' : 'success'}">${log.type}</span></td>
+                    <td>${log.message}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          `}
+        </div>
+      `;
+
+      const refreshBtn = document.getElementById('refreshLogsBtn');
+      if (refreshBtn) {
+        refreshBtn.addEventListener('click', () => this.loadLogs());
+      }
+    } catch (err) {
+      content.innerHTML = `
+        <div class="card">
+          <div class="card-title">系统日志</div>
+          <div class="loading" style="color: #f56565;">加载失败: ${err.message}</div>
+        </div>
+      `;
     }
   }
 
@@ -282,6 +364,57 @@ class App {
         await this.addProxy(form.link.value, form.domain.value, form.email.value);
         modal.classList.remove('active');
         form.reset();
+      } catch (err) {
+        alert(err.message);
+      }
+    });
+  }
+
+  showChangePasswordModal() {
+    const modal = document.getElementById('changePasswordModal');
+    modal.classList.add('active');
+
+    const cancelBtn = document.getElementById('cancelChangePassword');
+    const form = document.getElementById('changePasswordForm');
+
+    // 移除旧事件监听器，避免重复绑定
+    const newCancelBtn = cancelBtn.cloneNode(true);
+    cancelBtn.parentNode.replaceChild(newCancelBtn, cancelBtn);
+    const newForm = form.cloneNode(true);
+    form.parentNode.replaceChild(newForm, form);
+
+    newCancelBtn.addEventListener('click', () => {
+      modal.classList.remove('active');
+      newForm.reset();
+    });
+
+    newForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const f = e.target;
+      const oldPassword = f.oldPassword.value;
+      const newPassword = f.newPassword.value;
+      const confirmPassword = f.confirmPassword.value;
+
+      if (newPassword !== confirmPassword) {
+        alert('两次输入的新密码不一致');
+        return;
+      }
+
+      try {
+        const res = await fetch(`${API_BASE}/change-password`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ oldPassword, newPassword })
+        });
+
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || '修改失败');
+
+        alert('密码修改成功！请重新登录');
+        modal.classList.remove('active');
+        f.reset();
+        await this.logout();
       } catch (err) {
         alert(err.message);
       }
