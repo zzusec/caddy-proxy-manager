@@ -425,8 +425,10 @@ EOF
         rm -f "$site_file" "$META_DIR/${domain}.json"
         err "已回滚"
     fi
-    systemctl enable caddy >/dev/null 2>&1 || true
-    systemctl restart caddy
+    # 注意: Caddy 的启停由调用方管理 (Web 后端按需启动)
+    # 如果在 Docker 容器外独立使用，请取消注释下面两行:
+    # systemctl enable caddy >/dev/null 2>&1 || true
+    # systemctl restart caddy
 
     local new_link
     new_link=$(build_new_link "$domain")
@@ -473,7 +475,8 @@ cmd_del(){
     local meta=$META_DIR/${domain}.json
     [[ ! -f $site_file && ! -f $meta ]] && err "未找到 $domain 的配置"
     rm -f "$site_file" "$meta"
-    systemctl reload caddy 2>/dev/null || systemctl restart caddy
+    # 注意: Caddy 的 reload/stop 由调用方管理
+    # systemctl reload caddy 2>/dev/null || systemctl restart caddy
     _green "已删除 $domain"
 }
 

@@ -1,12 +1,13 @@
 FROM node:18-alpine
 
-# 安装必要工具
+# 安装必要工具 (procps 提供 pgrep, 用于检测 Caddy 进程)
 RUN apk add --no-cache \
     bash \
     curl \
     openssl \
     jq \
-    ca-certificates
+    ca-certificates \
+    procps
 
 # 安装 Caddy
 RUN wget -qO /usr/bin/caddy "https://caddyserver.com/api/download?os=linux&arch=amd64" \
@@ -30,8 +31,8 @@ RUN chmod +x /etc/caddy/cpm.sh
 # 创建数据目录
 RUN mkdir -p /app/data
 
-# 暴露端口
-EXPOSE 3000 80 443
+# 暴露端口 (Caddy 80/443 按需占用)
+EXPOSE 3000
 
 # 启动脚本
 COPY docker-entrypoint.sh /docker-entrypoint.sh

@@ -271,15 +271,7 @@ class App {
     const content = document.getElementById('content');
     switch (this.currentView) {
       case 'dashboard':
-        content.innerHTML = `
-          <div class="card">
-            <div class="card-title">系统概览</div>
-            <div style="margin-top: 20px;">
-              <p>代理服务数量: <strong>${this.proxies.length}</strong></p>
-              <p>Caddy 状态: <span class="badge badge-success">运行中</span></p>
-            </div>
-          </div>
-        `;
+        this.loadDashboard();
         break;
       case 'proxies':
         this.loadProxies();
@@ -287,6 +279,63 @@ class App {
       case 'logs':
         this.loadLogs();
         break;
+    }
+  }
+
+  async loadDashboard() {
+    const content = document.getElementById('content');
+    try {
+      const res = await fetch(`${API_BASE}/status`, { credentials: 'include' });
+      const status = await res.json();
+      const caddyOnline = status.caddy === 'active';
+
+      content.innerHTML = `
+        <div class="card">
+          <div class="card-title">系统概览</div>
+          <div style="margin-top: 20px; line-height: 2;">
+            <p>📦 代理服务数量: <strong>${status.proxyCount}</strong></p>
+            <p>🔄 Caddy 状态:
+              <span class="badge badge-${caddyOnline ? 'success' : 'warning'}">
+                ${status.caddyMode || (caddyOnline ? '运行中' : '已停止')}
+              </span>
+            </p>
+            <p>⏱️  运行时长: <strong>${Math.floor(status.uptime / 60)} 分钟</strong></p>
+          </div>
+          <div style="margin-top: 20px; padding: 15px; background: #f7fafc; border-radius: 6px; font-size: 13px; color: #4a5568;">
+            💡 <strong>按需启动模式</strong>:
+            添加首个代理服务时，Caddy 自动启动并监听 80/443 端口；
+            删除所有代理后，Caddy 自动停止释放端口。
+          </div>
+          ${status.proxyCount > 0 ? `
+            <div style="margin-top: 20px;">
+              <button class="btn ${caddyOnline ? 'btn-danger' : 'btn-success'}" id="toggleCaddyBtn">
+                ${caddyOnline ? '🛑 手动停止 Caddy' : '🚀 手动启动 Caddy'}
+              </button>
+            </div>
+          ` : ''}
+        </div>
+      `;
+
+      const toggleBtn = document.getElementById('toggleCaddyBtn');
+      if (toggleBtn) {
+        toggleBtn.addEventListener('click', async () => {
+          const action = caddyOnline ? 'stop' : 'start';
+          try {
+            const r = await fetch(`${API_BASE}/caddy/${action}`, {
+              method: 'POST',
+              credentials: 'include'
+            });
+            const data = await r.json();
+            if (!r.ok) throw new Error(data.error);
+            alert(data.message);
+            this.loadDashboard();
+          } catch (e) {
+            alert(e.message);
+          }
+        });
+      }
+    } catch (e) {
+      content.innerHTML = `<div class="card"><div class="loading" style="color: #f56565;">加载失败: ${e.message}</div></div>`;
     }
   }
 

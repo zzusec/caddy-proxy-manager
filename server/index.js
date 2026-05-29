@@ -136,6 +136,65 @@ app.post('/api/change-password', requireAuth, (req, res) => {
   res.json({ success: true, message: '密码修改成功' });
 });
 
+// ========== Caddy 进程管理 ==========
+// 按需启动：有代理时启动 Caddy，无代理时停止 Caddy，释放 80/443 端口
+const SITES_DIR = '/etc/caddy/sites';
+const CADDYFILE = '/etc/caddy/Caddyfile';
+
+async function isCaddyRunning() {
+  try {
+    const { stdout } = await execAsync('pgrep -x caddy || true');
+    return stdout.trim().length > 0;
+  } catch {
+    return false;
+  }
+}
+
+async function getSiteCount() {
+  try {
+    if (!existsSync(SITES_DIR)) return 0;
+    const files = readdirSync(SITES_DIR).filter(f => f.endsWith('.caddy'));
+    return files.length;
+  } catch {
+    return 0;
+  }
+}
+
+async function startCaddy() {
+  const running = await isCaddyRunning();
+  if (running) {
+    // 已运行，reload 配置即可
+    try {
+      await execAsync(`caddy reload --config ${CADDYFILE} --adapter caddyfile`);
+      console.log('🔄 Caddy 配置已重载');
+    } catch (e) {
+      console.error('❌ Caddy reload 失败:', e.message);
+    }
+    return;
+  }
+  // 未运行，启动
+  try {
+    await execAsync(`caddy start --config ${CADDYFILE} --adapter caddyfile`);
+    console.log('🚀 Caddy 已启动 (监听 80/443)');
+    db.prepare('INSERT INTO logs (type, message) VALUES (?, ?)').run('info', 'Caddy 已启动 (按需)');
+  } catch (e) {
+    console.error('❌ Caddy 启动失败:', e.message);
+    throw e;
+  }
+}
+
+async function stopCaddy() {
+  const running = await isCaddyRunning();
+  if (!running) return;
+  try {
+    await execAsync('caddy stop');
+    console.log('🛑 Caddy 已停止 (释放 80/443)');
+    db.prepare('INSERT INTO logs (type, message) VALUES (?, ?)').run('info', 'Caddy 已停止 (无代理服务)');
+  } catch (e) {
+    console.error('❌ Caddy 停止失败:', e.message);
+  }
+}
+
 // ========== 代理管理接口 ==========
 app.get('/api/proxies', requireAuth, (req, res) => {
   const proxies = db.prepare('SELECT * FROM proxies ORDER BY created_at DESC').all();
@@ -146,10 +205,10 @@ app.post('/api/proxies', requireAuth, async (req, res) => {
   const { link, domain, email } = req.body;
 
   try {
-    // 调用 cpm.sh 脚本添加代理
+    // 调用 cpm.sh 脚本生成配置（脚本内部不再 restart caddy，由后端管理）
     const cpmScript = '/etc/caddy/cpm.sh';
-    const { stdout, stderr } = await execAsync(
-      `echo "${link}\n${domain}\n${email || ''}\n" | bash ${cpmScript} add`,
+    await execAsync(
+      `echo -e "${link}\n${domain}\n${email || ''}\n" | bash ${cpmScript} add`,
       { shell: '/bin/bash' }
     );
 
@@ -165,7 +224,10 @@ app.post('/api/proxies', requireAuth, async (req, res) => {
 
       db.prepare('INSERT INTO logs (type, message) VALUES (?, ?)').run('info', `添加代理: ${domain}`);
 
-      res.json({ success: true, message: '代理添加成功' });
+      // ✨ 按需启动 Caddy（首次添加时启动，已运行则 reload）
+      await startCaddy();
+
+      res.json({ success: true, message: '代理添加成功，Caddy 已启动' });
     } else {
       throw new Error('代理配置文件未生成');
     }
@@ -185,7 +247,15 @@ app.delete('/api/proxies/:domain', requireAuth, async (req, res) => {
     db.prepare('DELETE FROM proxies WHERE domain = ?').run(domain);
     db.prepare('INSERT INTO logs (type, message) VALUES (?, ?)').run('info', `删除代理: ${domain}`);
 
-    res.json({ success: true });
+    // ✨ 删除后检查：还有代理就 reload，没有了就停止 Caddy 释放端口
+    const remaining = await getSiteCount();
+    if (remaining === 0) {
+      await stopCaddy();
+    } else {
+      await startCaddy(); // 实际是 reload
+    }
+
+    res.json({ success: true, caddyRunning: remaining > 0 });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -227,16 +297,36 @@ app.get('/api/logs/caddy', requireAuth, async (req, res) => {
 // ========== 系统状态 ==========
 app.get('/api/status', requireAuth, async (req, res) => {
   try {
-    const { stdout: caddyStatus } = await execAsync('systemctl is-active caddy');
+    const caddyRunning = await isCaddyRunning();
     const proxyCount = db.prepare('SELECT COUNT(*) as count FROM proxies').get();
 
     res.json({
-      caddy: caddyStatus.trim(),
+      caddy: caddyRunning ? 'active' : 'inactive',
+      caddyMode: caddyRunning ? '运行中 (监听 80/443)' : '已停止 (端口已释放)',
       proxyCount: proxyCount.count,
       uptime: process.uptime()
     });
   } catch (error) {
     res.json({ caddy: 'inactive', proxyCount: 0, uptime: 0 });
+  }
+});
+
+// 手动控制 Caddy（管理员功能）
+app.post('/api/caddy/start', requireAuth, async (req, res) => {
+  try {
+    await startCaddy();
+    res.json({ success: true, message: 'Caddy 已启动' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/caddy/stop', requireAuth, async (req, res) => {
+  try {
+    await stopCaddy();
+    res.json({ success: true, message: 'Caddy 已停止' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
   }
 });
 
