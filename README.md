@@ -17,8 +17,8 @@
 ### 🐳 Docker 一键部署（推荐）
 
 ```bash
-# 1. 下载项目
-git clone <your-repo> caddy-proxy-manager
+# 1. 克隆项目
+git clone https://github.com/zzusec/caddy-proxy-manager.git
 cd caddy-proxy-manager
 
 # 2. 一键启动
@@ -72,7 +72,7 @@ bash quick-start.sh
 
 ```bash
 # 下载项目
-git clone <your-repo> caddy-proxy-manager
+git clone https://github.com/zzusec/caddy-proxy-manager.git
 cd caddy-proxy-manager
 
 # 一键启动（自动检测并安装 Docker）
@@ -150,7 +150,7 @@ chmod +x /etc/caddy/cpm.sh
 
 ```bash
 cd /opt
-git clone <your-repo> caddy-proxy-manager
+git clone https://github.com/zzusec/caddy-proxy-manager.git
 cd caddy-proxy-manager
 
 npm install
