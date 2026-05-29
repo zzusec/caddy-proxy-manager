@@ -1,0 +1,33 @@
+version: '3.8'
+
+services:
+  caddy-proxy-manager:
+    build: .
+    container_name: caddy-proxy-manager
+    restart: unless-stopped
+    ports:
+      - "3000:3000"   # Web 管理界面
+      - "80:80"       # HTTP (用于 SSL 证书申请)
+      - "443:443"     # HTTPS (代理服务)
+    volumes:
+      - ./data:/app/data                    # 数据库持久化
+      - caddy_data:/var/lib/caddy           # Caddy 数据 (SSL 证书)
+      - caddy_config:/etc/caddy             # Caddy 配置
+      - caddy_logs:/var/log/caddy           # Caddy 日志
+    environment:
+      - NODE_ENV=production
+      - TZ=Asia/Shanghai
+    networks:
+      - cpm-network
+
+volumes:
+  caddy_data:
+    driver: local
+  caddy_config:
+    driver: local
+  caddy_logs:
+    driver: local
+
+networks:
+  cpm-network:
+    driver: bridge

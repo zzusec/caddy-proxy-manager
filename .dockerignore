@@ -1,0 +1,15 @@
+node_modules/
+dist/
+data/*.db
+data/*.db-*
+.git/
+.DS_Store
+*.log
+npm-debug.log*
+.env
+.env.local
+README.md
+DOCKER.md
+deploy.sh
+install-docker.sh
+quick-start.sh
