@@ -8,6 +8,23 @@ set -e
 echo "🚀 Caddy Proxy Manager 快速启动"
 echo ""
 
+# 检查是否已安装
+if docker ps -a | grep -q caddy-proxy-manager; then
+    echo "⚠️  检测到已安装的 Caddy Proxy Manager"
+    echo ""
+    read -p "是否先卸载现有安装? [y/N]: " uninstall
+    if [[ ${uninstall,,} == "y" ]]; then
+        echo "🗑️  卸载现有安装..."
+        docker-compose down -v 2>/dev/null || true
+        docker rm -f caddy-proxy-manager 2>/dev/null || true
+        echo "✅ 卸载完成"
+        echo ""
+    else
+        echo "❌ 取消安装"
+        exit 0
+    fi
+fi
+
 # 检查 Docker
 if ! command -v docker &> /dev/null; then
     echo "❌ 未检测到 Docker"
